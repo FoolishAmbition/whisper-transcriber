@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QInputDialog,
@@ -444,6 +445,7 @@ class Window(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(str(ROOT / "assets" / "whisper-transcriber.ico")))
     app.setStyle("Fusion")
     app.setStyleSheet("""
         QMainWindow, QWidget { font-family: "Segoe UI"; font-size: 10pt; }
