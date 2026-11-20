@@ -29,6 +29,7 @@ Build a drag-and-drop Windows app that turns course recordings, Zoom meetings, a
 | Meeting summaries | Capture decisions, action items, and open questions. Mark owners and deadlines as unspecified when the recording does not state them. |
 | Notes detail | Let the user choose per recording. Concise notes focus on essentials. Detailed study notes expand concepts and examples. Detailed meeting notes add discussion context and rationale when stated. |
 | Export and recovery | Export timestamped TXT and Markdown notes. Protect existing exports from accidental overwrite. Preserve completed transcripts and let the user retry notes independently. |
+| Export naming | Suggest a topic-based title after generating local notes. Let the user edit it and use it as the default for both exports. Use the recording name when the title is blank. |
 | Session storage | Keep transcript and note edits in the current session. The user retains them through exports. |
 | Offline processing | After initial model setup, produce transcripts and notes with the network disconnected. Confirm local notes performance on the target PC. |
 

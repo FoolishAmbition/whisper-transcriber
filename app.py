@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QHeaderView,
 )
 
-from transcription import EXTENSIONS, Segment, generate_notes, save_text, timestamp
+from transcription import EXTENSIONS, Segment, filename_stem, generate_notes, save_text
+from transcription import suggest_export_title, timestamp
 from transcription import transcribe, transcript_text
 
 
@@ -73,6 +74,7 @@ class Window(QMainWindow):
         self.path = None
         self.segments = []
         self.job = None
+        self.suggested_title = ""
         self.glossaries = {}
         self.audio = QAudioOutput(self)
         self.player = QMediaPlayer(self)
@@ -145,6 +147,10 @@ class Window(QMainWindow):
         splitter.setStretchFactor(1, 1)
         self.export_transcript = button("Export transcript…", lambda: self.export(False))
         self.export_notes = button("Export notes…", lambda: self.export(True))
+        self.export_title = QLineEdit()
+        self.export_title.setPlaceholderText("Title suggested after generating notes")
+        self.export_title.setClearButtonEnabled(True)
+        self.export_title.setAccessibleName("Export title")
         self.progress = QProgressBar()
         self.progress.hide()
         footer = QHBoxLayout()
@@ -158,6 +164,10 @@ class Window(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 12)
         layout.addLayout(header)
         layout.addWidget(splitter, 1)
+        title_row = QHBoxLayout()
+        title_row.addWidget(QLabel("Export title"))
+        title_row.addWidget(self.export_title, 1)
+        layout.addLayout(title_row)
         layout.addLayout(footer)
         self.setCentralWidget(central)
         self.statusBar().showMessage("Local transcription")
@@ -175,6 +185,7 @@ class Window(QMainWindow):
         self.export_notes.setEnabled(bool(self.notes.toPlainText().strip()) and not busy)
         self.table.setEnabled(not busy)
         self.notes.setReadOnly(busy)
+        self.export_title.setEnabled(self.path is not None and not busy)
 
     def read_glossaries(self):
         try:
@@ -250,6 +261,9 @@ class Window(QMainWindow):
         if path == self.path or not self.confirm_discard():
             return
         self.path = path
+        self.suggested_title = ""
+        self.export_title.clear()
+        self.export_title.setPlaceholderText(path.stem)
         self.language.setFocus()
         self.file_name.setText(path.name)
         self.file_name.setToolTip(str(path))
@@ -328,13 +342,23 @@ class Window(QMainWindow):
         ) != QMessageBox.StandardButton.Yes:
             return
         kind, detail, model = self.kind.currentText(), self.detail.currentText(), self.notes_model.text().strip()
-        self.start_job(
-            lambda progress, cancel: generate_notes(segments, kind, detail, model, progress, cancel),
-            self.notes_done,
-        )
+        def write_notes(progress, cancel):
+            notes = generate_notes(segments, kind, detail, model, progress, cancel)
+            progress(None, "Suggesting an export title…")
+            try:
+                title = suggest_export_title(notes, model, cancel)
+            except (RuntimeError, OSError, ValueError):
+                title = ""
+            return notes, title
 
-    def notes_done(self, notes):
+        self.start_job(write_notes, self.notes_done)
+
+    def notes_done(self, result):
+        notes, title = result
         self.notes.setPlainText(notes)
+        if title and self.export_title.text() in ("", self.suggested_title):
+            self.export_title.setText(title)
+            self.suggested_title = title
         self.tabs.setCurrentWidget(self.notes)
         self.statusBar().showMessage("Notes ready")
 
@@ -387,8 +411,9 @@ class Window(QMainWindow):
             destination /= self.path.parent.relative_to(ROOT / "recordings")
         try:
             destination.mkdir(parents=True, exist_ok=True)
+            stem = filename_stem(self.export_title.text()) or self.path.stem
             filename, _ = QFileDialog.getSaveFileName(
-                self, "Export", str(destination / (self.path.stem + suffix)), file_filter,
+                self, "Export", str(destination / (stem + suffix)), file_filter,
                 options=QFileDialog.Option.DontConfirmOverwrite,
             )
             if not filename:
