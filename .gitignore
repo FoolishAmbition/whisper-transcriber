@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Private transcription inputs, exports, and local settings
+/recordings/
+/transcripts/
+/glossaries.local.json
+*.[mM]4[aA]
+*.[mM][pP]3
+*.[mM][pP]4
+*.[wW][aA][vV]
+*_transcript.txt
+*_notes.md
