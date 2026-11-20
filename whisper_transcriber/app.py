@@ -13,15 +13,15 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QHeaderView,
 )
 
-from exports import NOTES, TRANSCRIPT, save_text
-from jobs import Job
-from recording_history import PreviousTranscript, Recording, RecordingHistory
-from transcription import EXTENSIONS, Segment, generate_notes_with_title
-from transcription import suggest_export_title, timestamp
-from transcription import transcribe, transcript_text
+from .exports import NOTES, TRANSCRIPT, save_text
+from .jobs import Job
+from .recording_history import PreviousTranscript, Recording, RecordingHistory
+from .transcription import EXTENSIONS, Segment, generate_notes_with_title
+from .transcription import suggest_export_title, timestamp
+from .transcription import transcribe, transcript_text
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 GLOSSARIES = ROOT / "glossaries.local.json"
 DROP_HINT = "Drop an M4A, MP3, WAV, or MP4 recording"
 
@@ -523,7 +523,3 @@ def main():
     window = Window()
     window.show()
     return app.exec()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

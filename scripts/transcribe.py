@@ -7,7 +7,7 @@ print("Loading model... please wait")
 model = WhisperModel("small", device="cpu", compute_type="int8")
 
 # Your audio file
-project_dir = Path(__file__).resolve().parent
+project_dir = Path(__file__).resolve().parents[1]
 audio_file = project_dir / "recordings" / "WSQ" / "day1wsq.m4a"
 
 print(f"Transcribing: {audio_file} ...")

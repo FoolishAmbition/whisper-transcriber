@@ -8,5 +8,5 @@ if not exist "venv\Scripts\python.exe" (
 )
 if not defined WHISPER_CUDA_DLL_DIR set "WHISPER_CUDA_DLL_DIR=%LOCALAPPDATA%\Programs\Ollama\lib\ollama\cuda_v12"
 if exist "%WHISPER_CUDA_DLL_DIR%\cublas64_12.dll" set "PATH=%WHISPER_CUDA_DLL_DIR%;%PATH%"
-"venv\Scripts\python.exe" app.py
+"venv\Scripts\python.exe" -m whisper_transcriber
 if errorlevel 1 pause

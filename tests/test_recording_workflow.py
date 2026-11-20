@@ -8,9 +8,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QFileDialog, QLineEdit, QMessageBox
 
-from app import Window
-from recording_history import PreviousTranscript, Recording, RecordingHistory
-from transcription import NotesResult, Segment
+from whisper_transcriber.app import Window
+from whisper_transcriber.recording_history import PreviousTranscript, Recording, RecordingHistory
+from whisper_transcriber.transcription import NotesResult, Segment
 
 
 class RecordingWorkflowTest(unittest.TestCase):
@@ -75,7 +75,7 @@ class RecordingWorkflowTest(unittest.TestCase):
         with patch.object(reopened.player, "setSource"):
             reopened.set_recording(self.source)
         self.assertEqual(reopened.previous.export_path, target)
-        with patch("app.QDesktopServices.openUrl", return_value=True) as open_url:
+        with patch("whisper_transcriber.app.QDesktopServices.openUrl", return_value=True) as open_url:
             reopened.open_previous_transcript()
         self.assertEqual(Path(open_url.call_args.args[0].toLocalFile()), target)
         with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):

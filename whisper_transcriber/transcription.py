@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from exports import filename_stem
+from .exports import filename_stem
 
 
 EXTENSIONS = {".m4a", ".mp3", ".wav", ".mp4"}

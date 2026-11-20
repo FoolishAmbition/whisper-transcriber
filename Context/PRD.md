@@ -58,7 +58,8 @@ The target Windows PC has 32 GB RAM and a GeForce RTX 5070. A typical recording 
 
 ## Workspace layout
 
-- `transcribe.py` is the current transcription script and accuracy baseline.
+- `whisper_transcriber/` contains the desktop application.
+- `scripts/transcribe.py` is the original single-file transcription and accuracy baseline.
 - `recordings/` holds source audio in `CAPM/`, `CCNA/`, `WSQ/`, and `Unsorted/`.
 - `transcripts/` holds existing text exports in matching course folders.
 - `venv/` holds the local Python environment.

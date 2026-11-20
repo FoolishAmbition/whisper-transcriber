@@ -33,10 +33,10 @@ When you reopen a recording, the app shows if it was transcribed before. **Open 
 
 ## Code layout
 
-- `app.py` contains the Windows UI, playback, and glossary management.
-- `transcription.py` handles transcription and notes generation.
-- `jobs.py` runs cancellable background operations, `recording_history.py` tracks prior transcriptions, and `exports.py` handles filenames, formats, and safe writes.
-- `transcribe.py` is the original single-file baseline.
-- `recordings/` and `transcripts/` are ignored by Git, along with saved local glossaries.
+- `whisper_transcriber/` contains the desktop UI, transcription and notes, background jobs, history, and exports. The launcher runs `python -m whisper_transcriber`.
+- `scripts/transcribe.py` is the original single-file baseline. From the project root, run it with `.\venv\Scripts\python.exe scripts\transcribe.py`.
+- `tests/` contains workflow regression tests. Run them from the project root with `.\venv\Scripts\python.exe -m unittest discover -s tests`.
+- `assets/` holds the Windows app icon used by the launcher shortcut.
+- `recordings/` holds source audio and `transcripts/` holds exports. Both are ignored by Git, along with saved local glossaries and history.
 
 Cloud transcription and speaker labeling are planned separately. The starting accuracy comparison uses CCNA excerpts. A complete two-hour performance and accuracy evaluation is part of release validation.
