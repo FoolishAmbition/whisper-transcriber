@@ -27,12 +27,15 @@ Start Ollama and install a local model, for example `ollama pull qwen2.5:7b`. Mo
 
 To disable cloud models in Ollama itself, set `OLLAMA_NO_CLOUD=1` for the Ollama server and restart it. See [Ollama's local-only configuration](https://docs.ollama.com/faq#how-do-i-disable-ollamas-cloud-features).
 
-Generate notes to get a suggested export title based on the topic. Edit **Export title** to use your own wording. Both the timestamped TXT and Markdown notes use that title in their suggested filenames. If the field is blank, the app uses the recording name. The app asks before replacing an existing file.
+Generate notes to get a suggested export title, or use **Suggest title** to get one from the transcript without generating notes. Edit **Export title** to use your own wording. Both save dialogs fill in the suggested filename. If the field is blank, the app uses the recording name. The app asks before replacing an existing file.
+
+When you reopen a recording, the app shows if it was transcribed before. **Open previous transcript** opens the last TXT export when the file is available. Older exports are recognized by their original filename in the corresponding workspace folder. **Clear recording** closes the selection and leaves the recording and exports on disk. The history database stays local and is ignored by Git.
 
 ## Code layout
 
-- `app.py` contains the Windows UI, playback, glossary management, and background jobs.
-- `transcription.py` handles inference, notes generation, and export writes.
+- `app.py` contains the Windows UI, playback, and glossary management.
+- `transcription.py` handles transcription and notes generation.
+- `jobs.py` runs cancellable background operations, `recording_history.py` tracks prior transcriptions, and `exports.py` handles filenames, formats, and safe writes.
 - `transcribe.py` is the original single-file baseline.
 - `recordings/` and `transcripts/` are ignored by Git, along with saved local glossaries.
 

@@ -1,9 +1,10 @@
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QUrl, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QInputDialog,
@@ -12,46 +13,17 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QHeaderView,
 )
 
-from transcription import EXTENSIONS, Segment, filename_stem, generate_notes, save_text
+from exports import NOTES, TRANSCRIPT, save_text
+from jobs import Job
+from recording_history import PreviousTranscript, Recording, RecordingHistory
+from transcription import EXTENSIONS, Segment, generate_notes_with_title
 from transcription import suggest_export_title, timestamp
 from transcription import transcribe, transcript_text
 
 
 ROOT = Path(__file__).resolve().parent
 GLOSSARIES = ROOT / "glossaries.local.json"
-
-
-class Cancelled(Exception):
-    pass
-
-
-class Job(QThread):
-    progress = Signal(object, str)
-    result = Signal(object)
-    failed = Signal(str)
-    cancelled = Signal()
-
-    def __init__(self, operation, parent):
-        super().__init__(parent)
-        self.operation = operation
-
-    def check_cancel(self):
-        if self.isInterruptionRequested():
-            raise Cancelled()
-
-    def run(self):
-        try:
-            result = self.operation(self.progress.emit, self.check_cancel)
-            self.check_cancel()
-        except Cancelled:
-            self.cancelled.emit()
-        except Exception as error:
-            if self.isInterruptionRequested():
-                self.cancelled.emit()
-            else:
-                self.failed.emit(str(error) or type(error).__name__)
-        else:
-            self.result.emit(result)
+DROP_HINT = "Drop an M4A, MP3, WAV, or MP4 recording"
 
 
 def choices(*items):
@@ -67,12 +39,16 @@ def button(label, callback):
 
 
 class Window(QMainWindow):
-    def __init__(self):
+    def __init__(self, history: RecordingHistory | None = None):
         super().__init__()
         self.setWindowTitle("Transcription & Notes")
         self.resize(1150, 760)
         self.setAcceptDrops(True)
-        self.path = None
+        self.history = history or RecordingHistory(
+            ROOT / "recording-history.local.sqlite3", ROOT / "recordings", ROOT / "transcripts",
+        )
+        self.recording: Recording | None = None
+        self.previous = PreviousTranscript()
         self.segments = []
         self.job = None
         self.suggested_title = ""
@@ -83,9 +59,11 @@ class Window(QMainWindow):
         self.player.errorOccurred.connect(lambda _error, message: self.statusBar().showMessage(message))
         self.player.positionChanged.connect(self.show_position)
 
-        self.file_name = QLabel("Drop an M4A, MP3, WAV, or MP4 recording")
+        self.file_name = QLabel(DROP_HINT)
         self.file_name.setTextFormat(Qt.TextFormat.PlainText)
         self.open_button = button("Open recording…", self.open_recording)
+        self.clear_button = button("Clear recording", self.clear_recording)
+        self.clear_button.setToolTip("Remove the selection and leave the file on disk")
         self.play_button = button("Play / pause", self.toggle_playback)
         self.position = QLabel("00:00:00")
         header = QHBoxLayout()
@@ -93,6 +71,14 @@ class Window(QMainWindow):
         header.addWidget(self.position)
         header.addWidget(self.play_button)
         header.addWidget(self.open_button)
+        header.addWidget(self.clear_button)
+        self.history_label = QLabel()
+        self.history_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.history_label.setWordWrap(True)
+        self.open_previous = button("Open previous transcript", self.open_previous_transcript)
+        history_row = QHBoxLayout()
+        history_row.addWidget(self.history_label, 1)
+        history_row.addWidget(self.open_previous)
 
         self.model = choices("small", "medium", "turbo", "large-v3")
         self.device = choices("CPU", "NVIDIA GPU")
@@ -152,6 +138,7 @@ class Window(QMainWindow):
         self.export_title.setPlaceholderText("Title suggested after generating notes")
         self.export_title.setClearButtonEnabled(True)
         self.export_title.setAccessibleName("Export title")
+        self.title_button = button("Suggest title", self.start_title)
         self.progress = QProgressBar()
         self.progress.hide()
         footer = QHBoxLayout()
@@ -164,10 +151,12 @@ class Window(QMainWindow):
         layout = QVBoxLayout(central)
         layout.setContentsMargins(18, 18, 18, 12)
         layout.addLayout(header)
+        layout.addLayout(history_row)
         layout.addWidget(splitter, 1)
         title_row = QHBoxLayout()
         title_row.addWidget(QLabel("Export title"))
         title_row.addWidget(self.export_title, 1)
+        title_row.addWidget(self.title_button)
         layout.addLayout(title_row)
         layout.addLayout(footer)
         self.setCentralWidget(central)
@@ -177,16 +166,20 @@ class Window(QMainWindow):
 
     def refresh(self):
         busy = self.job is not None
+        has_recording = self.recording is not None
         self.open_button.setEnabled(not busy)
-        self.start_button.setEnabled(self.path is not None and not busy)
-        self.play_button.setEnabled(self.path is not None)
+        self.clear_button.setEnabled(has_recording and not busy)
+        self.start_button.setEnabled(has_recording and not busy)
+        self.play_button.setEnabled(has_recording)
         self.notes_button.setEnabled(bool(self.segments) and not busy)
         self.cancel_button.setEnabled(busy and not self.job.isInterruptionRequested())
         self.export_transcript.setEnabled(bool(self.segments) and not busy)
         self.export_notes.setEnabled(bool(self.notes.toPlainText().strip()) and not busy)
         self.table.setEnabled(not busy)
         self.notes.setReadOnly(busy)
-        self.export_title.setEnabled(self.path is not None and not busy)
+        self.export_title.setEnabled(has_recording and not busy)
+        self.title_button.setEnabled(bool(self.segments) and not busy)
+        self.open_previous.setEnabled(not busy)
 
     def read_glossaries(self):
         try:
@@ -259,21 +252,71 @@ class Window(QMainWindow):
         if not path.is_file() or path.suffix.lower() not in EXTENSIONS:
             QMessageBox.warning(self, "Unsupported recording", "Choose an M4A, MP3, WAV, or MP4 file.")
             return
-        if path == self.path or not self.confirm_discard():
+        try:
+            recording = Recording.open(path)
+        except OSError as error:
+            QMessageBox.warning(self, "Could not open recording", str(error))
             return
-        self.path = path
+        if recording == self.recording or not self.confirm_discard():
+            return
+        self.reset_recording(recording)
+        if path.parent.name in self.glossaries:
+            self.profile.setCurrentText(path.parent.name)
+        self.language.setFocus()
+        self.statusBar().showMessage("Ready to transcribe locally")
+
+    def clear_recording(self):
+        if self.confirm_discard():
+            self.reset_recording(None)
+            self.statusBar().showMessage("Recording cleared")
+
+    def reset_recording(self, recording: Recording | None):
+        self.recording = recording
+        path = recording.path if recording else None
         self.suggested_title = ""
         self.export_title.clear()
-        self.export_title.setPlaceholderText(path.stem)
-        self.language.setFocus()
-        self.file_name.setText(path.name)
-        self.file_name.setToolTip(str(path))
-        self.player.setSource(QUrl.fromLocalFile(str(path)))
+        self.export_title.setPlaceholderText(path.stem if path else "Title suggested after generating notes")
+        self.file_name.setText(path.name if path else DROP_HINT)
+        self.file_name.setToolTip(str(path) if path else "")
+        self.player.stop()
+        self.player.setSource(QUrl.fromLocalFile(str(path)) if path else QUrl())
+        self.show_position(0)
         self.set_transcript([])
         self.notes.clear()
-        if self.path.parent.name in self.glossaries:
-            self.profile.setCurrentText(self.path.parent.name)
-        self.statusBar().showMessage("Ready to transcribe locally")
+        self.tabs.setCurrentWidget(self.table)
+        self.update_history()
+
+    def update_history(self):
+        self.previous = PreviousTranscript()
+        message = ""
+        if self.recording:
+            try:
+                self.previous = self.history.lookup(self.recording)
+            except (OSError, sqlite3.Error) as error:
+                message = f"Could not read local transcript history · {error}"
+            if self.previous.export_path:
+                message = f"Previously transcribed · {self.previous.export_path.name}"
+            elif self.previous.completed:
+                message = "Previously transcribed · no saved transcript found"
+        self.history_label.setText(message)
+        self.history_label.setVisible(bool(message))
+        self.open_previous.setVisible(self.previous.export_path is not None)
+
+    def record_completion(self, export_path: Path | None = None):
+        try:
+            self.history.record(self.recording, export_path)
+        except (OSError, sqlite3.Error) as error:
+            self.history_label.setText(f"Could not save local transcript history · {error}")
+            self.history_label.show()
+        else:
+            self.update_history()
+
+    def open_previous_transcript(self):
+        path = self.previous.export_path
+        if path and path.is_file() and QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            return
+        self.update_history()
+        QMessageBox.warning(self, "Could not open transcript", "The saved transcript could not be opened.")
 
     def show_position(self, milliseconds):
         self.position.setText(timestamp(milliseconds / 1000))
@@ -309,12 +352,17 @@ class Window(QMainWindow):
         ]
 
     def start_transcription(self):
-        if self.segments and QMessageBox.question(
-            self, "Transcribe again?",
-            "A successful run will replace the transcript in this window. Export edits first if needed.",
-        ) != QMessageBox.StandardButton.Yes:
-            return
-        path = self.path
+        self.update_history()
+        if self.segments or self.previous.completed or self.previous.export_path:
+            message = (
+                "A successful run will replace the transcript in this window. Export edits first if needed."
+                if self.segments else "This recording has been transcribed before. Run transcription again?"
+            )
+            if QMessageBox.question(self, "Transcribe again?", message,
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                    QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+                return
+        path = self.recording.path
         model = self.model.currentText()
         device = "cuda" if self.device.currentIndex() else "cpu"
         language = self.language.text().strip().lower() or None
@@ -330,6 +378,7 @@ class Window(QMainWindow):
             self.statusBar().showMessage("No speech was detected")
             return
         self.set_transcript(segments)
+        self.record_completion()
         self.tabs.setCurrentWidget(self.table)
         self.statusBar().showMessage(f"Transcript ready · {len(segments)} segments · {language}")
 
@@ -343,25 +392,39 @@ class Window(QMainWindow):
         ) != QMessageBox.StandardButton.Yes:
             return
         kind, detail, model = self.kind.currentText(), self.detail.currentText(), self.notes_model.text().strip()
-        def write_notes(progress, cancel):
-            notes = generate_notes(segments, kind, detail, model, progress, cancel)
-            progress(None, "Suggesting an export title…")
-            try:
-                title = suggest_export_title(notes, model, cancel)
-            except (RuntimeError, OSError, ValueError):
-                title = ""
-            return notes, title
-
-        self.start_job(write_notes, self.notes_done)
+        self.start_job(
+            lambda progress, cancel: generate_notes_with_title(segments, kind, detail, model, progress, cancel),
+            self.notes_done,
+        )
 
     def notes_done(self, result):
-        notes, title = result
-        self.notes.setPlainText(notes)
-        if title and self.export_title.text() in ("", self.suggested_title):
-            self.export_title.setText(title)
-            self.suggested_title = title
+        self.notes.setPlainText(result.text)
+        if result.title and self.export_title.text() in ("", self.suggested_title):
+            self.set_suggested_title(result.title)
         self.tabs.setCurrentWidget(self.notes)
-        self.statusBar().showMessage("Notes ready")
+        self.title_button.setToolTip(result.title_error)
+        message = "Notes ready" if result.title else "Notes ready · title unavailable; enter one or retry"
+        self.statusBar().showMessage(message)
+
+    def start_title(self):
+        source = self.notes.toPlainText().strip() or transcript_text(self.edited_segments())
+        if not source:
+            self.statusBar().showMessage("Add transcript text before suggesting a title")
+            return
+        model = self.notes_model.text().strip()
+        self.start_job(lambda _, cancel: suggest_export_title(source, model, cancel), self.title_done)
+
+    def title_done(self, title):
+        self.title_button.setToolTip("")
+        if title:
+            self.set_suggested_title(title)
+            self.statusBar().showMessage(f"Export title · {title}")
+        else:
+            self.statusBar().showMessage("No usable title returned · enter a title or retry")
+
+    def set_suggested_title(self, title):
+        self.export_title.setText(title)
+        self.suggested_title = title
 
     def start_job(self, operation, on_result):
         self.job = Job(operation, self)
@@ -401,27 +464,29 @@ class Window(QMainWindow):
         self.refresh()
 
     def export(self, notes):
-        if notes:
-            content = self.notes.toPlainText().strip() + "\n"
-            suffix, file_filter = "_notes.md", "Markdown (*.md)"
-        else:
-            content = transcript_text(self.edited_segments())
-            suffix, file_filter = "_transcript.txt", "Text (*.txt)"
-        destination = ROOT / "transcripts"
-        if self.path.is_relative_to(ROOT / "recordings"):
-            destination /= self.path.parent.relative_to(ROOT / "recordings")
+        export_format = NOTES if notes else TRANSCRIPT
+        content = self.notes.toPlainText().strip() + "\n" if notes else transcript_text(self.edited_segments())
+        destination = self.history.export_folder(self.recording)
+        suggested = export_format.default_path(destination, self.export_title.text(), self.recording.path)
         try:
             destination.mkdir(parents=True, exist_ok=True)
-            stem = filename_stem(self.export_title.text()) or self.path.stem
-            filename, _ = QFileDialog.getSaveFileName(
-                self, "Export", str(destination / (stem + suffix)), file_filter,
-                options=QFileDialog.Option.DontConfirmOverwrite,
-            )
-            if not filename:
+            dialog = QFileDialog(self)
+            # Explicitly fill the filename field instead of relying on the native dialog's initial path.
+            dialog.setOption(QFileDialog.Option.DontUseNativeDialog)
+            dialog.setOption(QFileDialog.Option.DontConfirmOverwrite)
+            dialog.setWindowTitle(f"Export {export_format.label}")
+            dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+            dialog.setNameFilter(export_format.file_filter)
+            dialog.setDefaultSuffix(export_format.extension)
+            dialog.setDirectory(str(destination))
+            dialog.selectFile(suggested.name)
+            if not dialog.exec():
                 return
-            target = Path(filename)
-            if not target.suffix:
-                target = target.with_suffix(Path(suffix).suffix)
+            target = Path(dialog.selectedFiles()[0])
+            if target.suffix.lower() != f".{export_format.extension}":
+                QMessageBox.warning(self, "Invalid export filename",
+                                    f"Use a .{export_format.extension} extension for this export.")
+                return
             try:
                 save_text(target, content)
             except FileExistsError:
@@ -431,6 +496,8 @@ class Window(QMainWindow):
         except OSError as error:
             QMessageBox.warning(self, "Could not export", str(error))
             return
+        if not notes:
+            self.record_completion(target)
         self.statusBar().showMessage(f"Exported · {target}")
 
     def closeEvent(self, event):

@@ -221,6 +221,7 @@ __marimo__/
 /recordings/
 /transcripts/
 /glossaries.local.json
+/recording-history.local.sqlite3*
 *.[mM]4[aA]
 *.[mM][pP]3
 *.[mM][pP]4
