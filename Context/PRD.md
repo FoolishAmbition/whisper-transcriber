@@ -21,16 +21,16 @@ Build a drag-and-drop Windows app that turns course recordings, Zoom meetings, a
 | Area | Requirement |
 | --- | --- |
 | Windows app | Accept M4A, MP3, WAV, and MP4, including downloaded Zoom recordings. The workflow works without PowerShell or edits to Python. |
-| Transcription | Start with faster-whisper. Offer automatic language detection and a manual override. Show the selected processing mode before starting. |
+| Transcription | Start with faster-whisper. Default to English and offer other spoken languages and automatic detection in a dropdown. Show the selected processing mode before starting. |
 | Vocabulary | Accept an optional glossary. Prioritize technical terms and names in the accuracy review. Test settings with and without the glossary to check whether it improves real terms or adds words that were never spoken. |
 | Glossary reuse | Save named glossaries by course or project, with a per-recording option for one-off terms. |
 | Transcript review | Show editable segments with click-to-play timestamps. Keep segment timings when text changes. |
 | Study notes | Provide an overview, key concepts, and review questions. Link factual takeaways to transcript timestamps where possible. |
 | Meeting summaries | Capture decisions, action items, and open questions. Mark owners and deadlines as unspecified when the recording does not state them. |
 | Notes detail | Let the user choose per recording. Concise notes focus on essentials. Detailed study notes expand concepts and examples. Detailed meeting notes add discussion context and rationale when stated. |
-| Export and recovery | Export timestamped TXT and Markdown notes. Protect existing exports from accidental overwrite. Preserve completed transcripts and let the user retry notes independently. |
-| Export naming | Suggest a topic-based title after generating local notes. Let the user edit it and use it as the default for both exports. Use the recording name when the title is blank. |
-| Recording history | Show completed transcriptions when reopening recordings, confirm before repeating the job, and open the prior TXT export when available. Keep history local. Allow clearing the selected recording from the app. |
+| Export and recovery | Default to SRT subtitles and offer timestamped TXT and Markdown notes. Protect existing exports from accidental overwrite. Preserve completed transcripts and let the user retry notes independently. |
+| Export naming | Use the recording's base name and folder for the default SRT path. Suggest an editable topic-based title for TXT and Markdown, with the recording name as fallback. |
+| Recording history | Show completed transcriptions when reopening recordings, confirm before repeating the job, and open the prior transcript export when available. Keep history local. Allow clearing the selected recording from the app. |
 | Session storage | Keep transcript and note edits in the current session. The user retains them through exports. |
 | Offline processing | After initial model setup, produce transcripts and notes with the network disconnected. Confirm local notes performance on the target PC. |
 

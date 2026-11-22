@@ -9,6 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QFileDialog, QLineEdit, QMessageBox
 
 from whisper_transcriber.app import Window
+from whisper_transcriber.exports import srt_text
 from whisper_transcriber.recording_history import PreviousTranscript, Recording, RecordingHistory
 from whisper_transcriber.transcription import NotesResult, Segment
 
@@ -53,6 +54,7 @@ class RecordingWorkflowTest(unittest.TestCase):
         window.transcription_done(([Segment(0, 2, "Virtual LANs")], "en"))
         self.assertIn("no saved transcript", window.history_label.text())
         window.notes_done(NotesResult("## Overview", "VLANs and Trunks"))
+        window.export_format.setCurrentIndex(1)
 
         def accept_prefilled(dialog):
             name = dialog.findChild(QLineEdit, "fileNameEdit").text()
@@ -81,6 +83,38 @@ class RecordingWorkflowTest(unittest.TestCase):
         with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
             reopened.start_transcription()
         self.assertIsNone(reopened.job)
+
+    def test_defaults_to_english_and_matching_srt_sidecar(self):
+        window = Window(self.history)
+        self.addCleanup(window.reset_recording, None)
+        with patch.object(window.player, "setSource"):
+            window.set_recording(self.source)
+        self.assertEqual(window.language.currentData(), "en")
+        window.language.setCurrentIndex(1)
+        self.assertIsNone(window.language.currentData())
+        window.transcription_done(([Segment(0.125, 2.625, "Virtual LANs")], "en"))
+        window.table.item(0, 1).setText("Edited subtitles")
+        window.notes_done(NotesResult("## Overview", "VLANs and Trunks"))
+
+        def accept_prefilled(dialog):
+            self.assertEqual(Path(dialog.selectedFiles()[0]), self.source.with_suffix(".srt"))
+            return 1
+
+        with patch.object(QFileDialog, "exec", accept_prefilled):
+            window.export(False)
+        target = self.source.with_suffix(".srt")
+        self.assertEqual(target.read_text(encoding="utf-8"),
+                         "1\n00:00:00,125 --> 00:00:02,625\nEdited subtitles\n")
+        self.assertEqual(window.previous.export_path, target)
+
+    def test_srt_skips_empty_cues_and_preserves_timing_past_an_hour(self):
+        text = srt_text([
+            Segment(1, 2, " "),
+            Segment(3599.9997, 3600, "你好\n\nWelcome"),
+            Segment(3601.05, 3602.02, "Next cue"),
+        ])
+        self.assertEqual(text, "1\n01:00:00,000 --> 01:00:00,001\n你好\nWelcome\n\n"
+                               "2\n01:00:01,050 --> 01:00:02,020\nNext cue\n")
 
 
 if __name__ == "__main__":

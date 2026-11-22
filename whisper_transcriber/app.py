@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget, QHeaderView,
 )
 
-from .exports import NOTES, TRANSCRIPT, save_text
+from .exports import NOTES, SUBTITLES, TRANSCRIPT, save_text, srt_text
 from .jobs import Job
 from .recording_history import PreviousTranscript, Recording, RecordingHistory
 from .transcription import EXTENSIONS, Segment, generate_notes_with_title
@@ -24,6 +24,12 @@ from .transcription import transcribe, transcript_text
 ROOT = Path(__file__).resolve().parents[1]
 GLOSSARIES = ROOT / "glossaries.local.json"
 DROP_HINT = "Drop an M4A, MP3, WAV, or MP4 recording"
+LANGUAGES = (
+    ("English (EN)", "en"), ("Auto-detect", None), ("Chinese", "zh"),
+    ("French", "fr"), ("German", "de"), ("Hindi", "hi"), ("Indonesian", "id"),
+    ("Japanese", "ja"), ("Korean", "ko"), ("Malay", "ms"), ("Portuguese", "pt"),
+    ("Spanish", "es"), ("Tamil", "ta"), ("Thai", "th"), ("Vietnamese", "vi"),
+)
 
 
 def choices(*items):
@@ -82,8 +88,9 @@ class Window(QMainWindow):
 
         self.model = choices("small", "medium", "turbo", "large-v3")
         self.device = choices("CPU", "NVIDIA GPU")
-        self.language = QLineEdit()
-        self.language.setPlaceholderText("Auto · enter en to force English")
+        self.language = QComboBox()
+        for label, code in LANGUAGES:
+            self.language.addItem(label, code)
         self.profile = choices("Per recording")
         self.profile.currentTextChanged.connect(self.load_glossary)
         self.terms = QPlainTextEdit()
@@ -101,7 +108,7 @@ class Window(QMainWindow):
         form = QFormLayout(settings)
         form.addRow("Whisper model", self.model)
         form.addRow("Run on", self.device)
-        form.addRow("Language code", self.language)
+        form.addRow("Spoken language", self.language)
         form.addRow("Glossary", self.profile)
         form.addRow(self.terms)
         form.addRow(self.save_profile_button)
@@ -133,6 +140,10 @@ class Window(QMainWindow):
         splitter.setSizes([335, 815])
         splitter.setStretchFactor(1, 1)
         self.export_transcript = button("Export transcript…", lambda: self.export(False))
+        self.export_format = QComboBox()
+        self.export_format.addItem("SRT subtitles (.srt)", SUBTITLES)
+        self.export_format.addItem("Timestamped text (.txt)", TRANSCRIPT)
+        self.export_format.setAccessibleName("Transcript file format")
         self.export_notes = button("Export notes…", lambda: self.export(True))
         self.export_title = QLineEdit()
         self.export_title.setPlaceholderText("Title suggested after generating notes")
@@ -144,6 +155,8 @@ class Window(QMainWindow):
         footer = QHBoxLayout()
         footer.addWidget(self.progress, 1)
         footer.addStretch()
+        footer.addWidget(QLabel("Format"))
+        footer.addWidget(self.export_format)
         footer.addWidget(self.export_transcript)
         footer.addWidget(self.export_notes)
 
@@ -174,6 +187,7 @@ class Window(QMainWindow):
         self.notes_button.setEnabled(bool(self.segments) and not busy)
         self.cancel_button.setEnabled(busy and not self.job.isInterruptionRequested())
         self.export_transcript.setEnabled(bool(self.segments) and not busy)
+        self.export_format.setEnabled(not busy)
         self.export_notes.setEnabled(bool(self.notes.toPlainText().strip()) and not busy)
         self.table.setEnabled(not busy)
         self.notes.setReadOnly(busy)
@@ -365,7 +379,7 @@ class Window(QMainWindow):
         path = self.recording.path
         model = self.model.currentText()
         device = "cuda" if self.device.currentIndex() else "cpu"
-        language = self.language.text().strip().lower() or None
+        language = self.language.currentData()
         glossary = ", ".join(line.strip() for line in self.terms.toPlainText().splitlines() if line.strip())
         self.start_job(
             lambda progress, cancel: transcribe(path, model, device, language, glossary, progress, cancel),
@@ -464,10 +478,20 @@ class Window(QMainWindow):
         self.refresh()
 
     def export(self, notes):
-        export_format = NOTES if notes else TRANSCRIPT
-        content = self.notes.toPlainText().strip() + "\n" if notes else transcript_text(self.edited_segments())
-        destination = self.history.export_folder(self.recording)
-        suggested = export_format.default_path(destination, self.export_title.text(), self.recording.path)
+        export_format = NOTES if notes else self.export_format.currentData()
+        source = self.recording.path
+        if export_format == SUBTITLES:
+            content = srt_text(self.edited_segments())
+            # A matching sidecar name lets players associate it with the source media.
+            suggested = source.with_suffix(".srt")
+        else:
+            content = self.notes.toPlainText().strip() + "\n" if notes else transcript_text(self.edited_segments())
+            folder = self.history.export_folder(self.recording)
+            suggested = export_format.default_path(folder, self.export_title.text(), source)
+        if not content:
+            self.statusBar().showMessage("Add transcript text before exporting")
+            return
+        destination = suggested.parent
         try:
             destination.mkdir(parents=True, exist_ok=True)
             dialog = QFileDialog(self)

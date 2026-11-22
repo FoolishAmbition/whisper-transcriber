@@ -19,7 +19,7 @@ Prioritize changes that make two-hour recordings easier to finish, review, and u
 | Batch queue with duplicate detection | Drop in several recordings and process them while away. | Each row shows progress and outcome. Existing transcripts are flagged, and a failed input leaves the rest of the queue runnable. |
 | Resume interrupted transcription | Recover useful progress when a long job stops. | A checkpoint records completed audio ranges. Resuming the same recording avoids missing or duplicated segments at the boundary. |
 | Corrections and glossary suggestions | Reuse fixes to technical terms and names across a course. | The app can propose an edited term for the active glossary. A user approves it before it is saved. |
-| More export formats | Use one transcript for reading, subtitles, or downstream tools. | Offer clean TXT without timestamps, SRT subtitles, and structured JSON while retaining the current timestamped TXT. |
+| More export formats | Use one transcript for reading or downstream tools. | Add clean TXT without timestamps and structured JSON alongside SRT and timestamped TXT. |
 | Bookmarks and highlights | Mark definitions, exam tips, or decisions during review. | A bookmark jumps to its audio timestamp and can be included in an export. |
 
 ## Later and nice to have

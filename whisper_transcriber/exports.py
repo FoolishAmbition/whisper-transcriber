@@ -44,4 +44,26 @@ class ExportFormat:
 
 
 TRANSCRIPT = ExportFormat("transcript", "_transcript", "txt", "Text (*.txt)")
+SUBTITLES = ExportFormat("subtitles", "", "srt", "SubRip subtitles (*.srt)")
 NOTES = ExportFormat("notes", "_notes", "md", "Markdown (*.md)")
+
+
+def _srt_timestamp(milliseconds: int) -> str:
+    seconds, millis = divmod(milliseconds, 1000)
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
+
+
+def srt_text(segments) -> str:
+    cues = []
+    for segment in segments:
+        # Blank lines separate SRT cues, including when a transcript edit spans lines.
+        lines = [line.strip() for line in segment.text.splitlines() if line.strip()]
+        if not lines:
+            continue
+        start = max(0, round(segment.start * 1000))
+        end = max(start + 1, round(segment.end * 1000))
+        timing = f"{_srt_timestamp(start)} --> {_srt_timestamp(end)}"
+        cues.append("\n".join([str(len(cues) + 1), timing, *lines]))
+    return "\n\n".join(cues) + "\n" if cues else ""

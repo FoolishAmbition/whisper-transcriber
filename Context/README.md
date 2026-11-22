@@ -21,15 +21,21 @@ Click a timestamp to play from that position. Double-click transcript text to ed
 
 Export a timestamped TXT transcript and share it manually with ChatGPT when you want study notes or a meeting summary. Transcription, playback, editing, and TXT export work without Ollama. Git ignores recordings, exports, and saved glossaries.
 
+## Subtitles for PotPlayer
+
+The **Spoken language** dropdown defaults to **English (EN)**. Select another spoken language or **Auto-detect** when needed.
+
+**Export transcript** defaults to **SRT subtitles (.srt)**. It suggests saving beside the source video with the same base name, such as `lecture.mp4` and `lecture.srt`. Open the video in PotPlayer, or drag the SRT onto the video if it does not load. Cues use Whisper's segment start and end times in milliseconds and include your edits. Choose **Timestamped text (.txt)** in the **Format** dropdown for the existing text export.
+
 ## Optional local notes with Ollama
 
 Start Ollama and install a local model, for example `ollama pull qwen2.5:7b`. Model setup needs internet access. In the app, choose **Study notes** or **Meeting summary**, select the detail level, and generate notes. The app sends transcript text to Ollama on this computer at `127.0.0.1:11434`. Longer files are processed in chronological sections. Check generated details and timestamp references against the transcript.
 
 To disable cloud models in Ollama itself, set `OLLAMA_NO_CLOUD=1` for the Ollama server and restart it. See [Ollama's local-only configuration](https://docs.ollama.com/faq#how-do-i-disable-ollamas-cloud-features).
 
-Generate notes to get a suggested export title, or use **Suggest title** to get one from the transcript without generating notes. Edit **Export title** to use your own wording. Both save dialogs fill in the suggested filename. If the field is blank, the app uses the recording name. The app asks before replacing an existing file.
+Generate notes to get a suggested export title, or use **Suggest title** to get one from the transcript without generating notes. Edit **Export title** to use your own wording for TXT and Markdown. If the field is blank, the app uses the recording name. The app asks before replacing an existing file.
 
-When you reopen a recording, the app shows if it was transcribed before. **Open previous transcript** opens the last TXT export when the file is available. Older exports are recognized by their original filename in the corresponding workspace folder. **Clear recording** closes the selection and leaves the recording and exports on disk. The history database stays local and is ignored by Git.
+When you reopen a recording, the app shows if it was transcribed before. **Open previous transcript** opens the last TXT or SRT export when the file is available. Older TXT exports are recognized by their original filename in the corresponding workspace folder. **Clear recording** closes the selection and leaves the recording and exports on disk. The history database stays local and is ignored by Git.
 
 ## Code layout
 
