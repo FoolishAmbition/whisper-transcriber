@@ -1,2 +1,4 @@
 faster-whisper==1.2.1
+# faster-whisper 1.2.1 uses an av.open argument removed in PyAV 19.
+av>=11,<19
 PySide6>=6.8,<7
